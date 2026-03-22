@@ -1,0 +1,35 @@
+.pinprint-add-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  background-color: rgba(255, 255, 255, 0.9);
+  border: 1px solid #ccc;
+  border-radius: 50%;
+  color: #333;
+  font-size: 20px;
+  font-weight: bold;
+  cursor: pointer;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+  pointer-events: auto; /* Ensure clicks are caught even if parent overrides */
+}
+
+.pinprint-add-btn:hover {
+  background-color: #f1f1f1;
+  transform: scale(1.1);
+}
+
+.pinprint-add-btn:active {
+  transform: scale(0.9);
+}
+
+/* Ensure the pin container is relatively positioned to hold our button. */
+[data-test-id="pin-visual-wrapper"] {
+  position: relative !important;
+}

@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "PinPrint",
+  "version": "1.0",
+  "description": "Collect images from Pinterest and arrange them in a printable A4 grid.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*.pinterest.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://*.pinterest.com/*"],
+      "js": ["content.js"],
+      "css": ["content.css"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "PinPrint"
+  }
+}
