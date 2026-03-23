@@ -30,6 +30,9 @@
 }
 
 /* Ensure the pin container is relatively positioned to hold our button. */
-[data-test-id="pin-visual-wrapper"] {
+[data-test-id="pinrep-image"],
+[data-test-id="pin"],
+[data-test-id="closeup-image"],
+.PinCard__imageWrapper {
   position: relative !important;
 }

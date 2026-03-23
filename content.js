@@ -12,7 +12,7 @@ function createAddButton() {
 
     // The container of the image is usually a div, let's look for an image nearby.
     // We attach the button inside the pin container.
-    const container = btn.closest('[data-test-id="pin-visual-wrapper"]') || btn.parentElement;
+    const container = btn.closest('[data-test-id="pinrep-image"], [data-test-id="pin"], [data-test-id="closeup-image"], .PinCard__imageWrapper') || btn.parentElement;
     if (!container) return;
 
     const img = container.querySelector('img');
@@ -63,7 +63,14 @@ function saveImage(src, btn) {
 
 function injectButtons() {
   // Try to find Pinterest pin visual wrappers that don't have our button yet.
-  const pins = document.querySelectorAll('[data-test-id="pin-visual-wrapper"]:not(.pinprint-injected)');
+  const selectors = [
+    '[data-test-id="pinrep-image"]:not(.pinprint-injected)',
+    '[data-test-id="pin"]:not(.pinprint-injected)',
+    '[data-test-id="closeup-image"]:not(.pinprint-injected)',
+    '.PinCard__imageWrapper:not(.pinprint-injected)'
+  ].join(', ');
+
+  const pins = document.querySelectorAll(selectors);
 
   pins.forEach(pin => {
     pin.classList.add('pinprint-injected');
@@ -77,6 +84,7 @@ function injectButtons() {
 }
 
 // Observe DOM for new pins (infinite scroll)
+let injectTimeout;
 const observer = new MutationObserver((mutations) => {
   let shouldInject = false;
   for (let mutation of mutations) {
@@ -86,7 +94,10 @@ const observer = new MutationObserver((mutations) => {
     }
   }
   if (shouldInject) {
-    injectButtons();
+    clearTimeout(injectTimeout);
+    injectTimeout = setTimeout(() => {
+      injectButtons();
+    }, 250); // Debounce by 250ms
   }
 });
 
