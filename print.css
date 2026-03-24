@@ -121,12 +121,10 @@ body {
     margin: 0;
     box-shadow: none;
     page-break-after: always;
-    width: 100%; /* Use full printable area */
-    height: 100%; /* Use full printable area */
-  }
-
-  /* Reset padding as @page margin handles it */
-  .page {
+    page-break-inside: avoid;
+    /* Explicitly define dimensions: A4 (210x297) minus 10mm margins on each side */
+    width: 190mm;
+    height: 277mm;
     padding: 0;
   }
 }
