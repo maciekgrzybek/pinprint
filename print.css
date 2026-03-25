@@ -90,7 +90,7 @@ body {
 .grid-item img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .footer {
@@ -106,7 +106,7 @@ body {
 @media print {
   @page {
     size: A4;
-    margin: 10mm;
+    margin: 0;
   }
 
   body {
@@ -121,12 +121,5 @@ body {
     margin: 0;
     box-shadow: none;
     page-break-after: always;
-    width: 100%; /* Use full printable area */
-    height: 100%; /* Use full printable area */
-  }
-
-  /* Reset padding as @page margin handles it */
-  .page {
-    padding: 0;
   }
 }
