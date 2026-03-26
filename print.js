@@ -1,6 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
   const container = document.getElementById('print-container');
-  const sizeRadios = document.querySelectorAll('input[name="gridSize"]');
   const printBtn = document.getElementById('print-btn');
 
   let images = [];
@@ -18,57 +17,130 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  function getGridSize() {
-    let size = 'large';
-    sizeRadios.forEach(radio => {
-      if (radio.checked) {
-        size = radio.value;
-      }
-    });
-    return size;
-  }
-
-  function getItemsPerPage(size) {
-    switch (size) {
-      case 'large': return 4;  // 2x2
-      case 'medium': return 9; // 3x3
-      case 'small': return 16; // 4x4
-      default: return 4;
-    }
-  }
-
-  function renderGrid() {
+  async function renderGrid() {
     container.innerHTML = '';
-    const size = getGridSize();
-    const itemsPerPage = getItemsPerPage(size);
 
-    // Group images into pages
-    const pages = [];
-    for (let i = 0; i < images.length; i += itemsPerPage) {
-      pages.push(images.slice(i, i + itemsPerPage));
-    }
-
-    if (pages.length === 0) {
+    if (images.length === 0) {
       container.innerHTML = '<p class="no-print" style="text-align: center;">No images to print.</p>';
       return;
     }
 
-    pages.forEach((pageImages, index) => {
+    // Preload all images to get their aspect ratios
+    const preloadedImages = await Promise.all(images.map(src => {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          resolve({
+            src,
+            width: img.width,
+            height: img.height,
+            aspectRatio: img.width / img.height
+          });
+        };
+        img.onerror = () => {
+          // Fallback if image fails to load
+          resolve({ src, width: 1, height: 1, aspectRatio: 1 });
+        };
+        img.src = src;
+      });
+    }));
+
+    // Group images into pages.
+    // We'll estimate the layout using flex rows. A row will try to fill 100% width.
+    // The height of a row is roughly proportional to the inverse of the sum of aspect ratios.
+    // Max printable height per page (297mm - 20mm padding - 10mm footer space)
+    // We will use a conceptual height unit here, based on an assumed row width.
+
+    // For flex basis aspect-ratio layout:
+    // row_height = row_width / sum(aspect_ratios)
+
+    const pages = [];
+    let currentPage = [];
+    const assumedWidth = 1000; // arbitrary unit for calculation
+    const maxPageHeight = 1414; // A4 ratio is ~ 1:1.414. So height is 1.414 * width
+
+    // We will build rows one by one.
+    let currentRow = [];
+    let currentRowAspectRatioSum = 0;
+
+    // Target height per row (approx). We don't want rows to be too tall or too short.
+    const targetRowHeight = maxPageHeight / 3;
+
+    for (const imgData of preloadedImages) {
+      currentRow.push(imgData);
+      currentRowAspectRatioSum += imgData.aspectRatio;
+
+      const estimatedRowHeight = assumedWidth / currentRowAspectRatioSum;
+
+      // If adding this image makes the row height reasonably small (so it fits width-wise),
+      // we end the row and check page height.
+      // We aim for rows that aren't massively tall.
+      if (estimatedRowHeight <= targetRowHeight || currentRow.length >= 4) {
+        // Calculate the height this row will actually take on the page
+        const rowHeight = maxPageHeight * (estimatedRowHeight / assumedWidth); // normalized
+
+        // Sum up the heights of rows currently on the page
+        const currentPageHeight = currentPage.reduce((sum, row) => sum + row.height, 0);
+
+        if (currentPageHeight + rowHeight > maxPageHeight * 0.95 && currentPage.length > 0) {
+          // This row pushes us over the page limit, start a new page
+          pages.push(currentPage);
+          currentPage = [{ images: currentRow, height: rowHeight }];
+        } else {
+          currentPage.push({ images: currentRow, height: rowHeight });
+        }
+
+        // Reset row
+        currentRow = [];
+        currentRowAspectRatioSum = 0;
+      }
+    }
+
+    // Handle any leftover images in the last row
+    if (currentRow.length > 0) {
+      const estimatedRowHeight = assumedWidth / currentRowAspectRatioSum;
+      const rowHeight = maxPageHeight * (estimatedRowHeight / assumedWidth);
+      const currentPageHeight = currentPage.reduce((sum, row) => sum + row.height, 0);
+
+      if (currentPageHeight + rowHeight > maxPageHeight * 0.95 && currentPage.length > 0) {
+        pages.push(currentPage);
+        currentPage = [{ images: currentRow, height: rowHeight }];
+      } else {
+        currentPage.push({ images: currentRow, height: rowHeight });
+      }
+    }
+
+    if (currentPage.length > 0) {
+      pages.push(currentPage);
+    }
+
+    // Render pages
+    pages.forEach(page => {
       const pageDiv = document.createElement('div');
       pageDiv.className = 'page';
 
       const gridDiv = document.createElement('div');
-      gridDiv.className = `grid grid-${size}`;
+      gridDiv.className = `grid`;
 
-      pageImages.forEach(src => {
-        const itemDiv = document.createElement('div');
-        itemDiv.className = 'grid-item';
+      page.forEach(row => {
+        const rowDiv = document.createElement('div');
+        rowDiv.className = 'masonry-row';
 
-        const img = document.createElement('img');
-        img.src = src;
+        row.images.forEach(imgData => {
+          const itemDiv = document.createElement('div');
+          itemDiv.className = 'grid-item';
 
-        itemDiv.appendChild(img);
-        gridDiv.appendChild(itemDiv);
+          // Flex-grow based on aspect ratio ensures items in a row share width correctly
+          itemDiv.style.flex = `${imgData.aspectRatio} 1 0`;
+
+          const img = document.createElement('img');
+          img.src = imgData.src;
+
+          itemDiv.appendChild(img);
+          rowDiv.appendChild(itemDiv);
+        });
+
+        gridDiv.appendChild(rowDiv);
       });
 
       pageDiv.appendChild(gridDiv);
@@ -81,10 +153,6 @@ document.addEventListener('DOMContentLoaded', () => {
       container.appendChild(pageDiv);
     });
   }
-
-  sizeRadios.forEach(radio => {
-    radio.addEventListener('change', renderGrid);
-  });
 
   printBtn.addEventListener('click', () => {
     window.print();
