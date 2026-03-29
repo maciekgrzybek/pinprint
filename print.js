@@ -5,14 +5,16 @@ document.addEventListener('DOMContentLoaded', () => {
   let images = [];
 
   function loadImages() {
-    chrome.storage.local.get(['pinPrintCollection'], (result) => {
+    chrome.storage.local.get(['pinPrintCollection'], async (result) => {
       images = result.pinPrintCollection || [];
-      renderGrid();
+      await renderGrid();
+
       // Only auto-print if we actually have images loaded
       if (images.length > 0) {
+        // A short timeout is still helpful to ensure the browser has fully painted the DOM
         setTimeout(() => {
           window.print();
-        }, 1000); // Give it a second to render
+        }, 500);
       }
     });
   }
@@ -46,72 +48,95 @@ document.addEventListener('DOMContentLoaded', () => {
     }));
 
     // Group images into pages.
-    // We'll estimate the layout using flex rows. A row will try to fill 100% width.
-    // The height of a row is roughly proportional to the inverse of the sum of aspect ratios.
-    // Max printable height per page (297mm - 20mm padding - 10mm footer space)
-    // We will use a conceptual height unit here, based on an assumed row width.
-
-    // For flex basis aspect-ratio layout:
-    // row_height = row_width / sum(aspect_ratios)
+    // A4 paper is 210mm x 297mm.
+    // To ensure compatibility with standard browser print margins (often ~10mm default),
+    // we make the virtual page slightly smaller so it forces the whole content onto one printed page.
+    // CSS .page has 10mm padding on all sides.
+    // We assume an effective paper size of 200mm x 285mm to avoid triggering standard browser margins.
+    // Usable width: 200 - 20 = 180mm
+    // Usable height: 285 - 20 (padding) - 10 (footer space) = 255mm.
+    const usableWidth = 180;
+    const usableHeight = 255;
+    const gap = 5; // 5mm gap between items and rows
 
     const pages = [];
-    let currentPage = [];
-    const assumedWidth = 1000; // arbitrary unit for calculation
-    const maxPageHeight = 1414; // A4 ratio is ~ 1:1.414. So height is 1.414 * width
+    let currentPageRows = [];
+    let currentPageHeight = 0;
 
-    // We will build rows one by one.
-    let currentRow = [];
+    let currentRowImages = [];
     let currentRowAspectRatioSum = 0;
 
-    // Target height per row (approx). We don't want rows to be too tall or too short.
-    const targetRowHeight = maxPageHeight / 3;
+    // We build rows. A row should have enough images to not be taller than a fraction of the page,
+    // or we max out at, say, 3-4 images to keep them visible.
+    // For a row of images, they share the width. The gaps also take up width.
+    // If a row has N images, there are (N-1) gaps.
+    // Width taken by images = usableWidth - (N-1)*gap.
+    // The height of the row = (usableWidth - (N-1)*gap) / sum(aspectRatios).
 
     for (const imgData of preloadedImages) {
-      currentRow.push(imgData);
+      currentRowImages.push(imgData);
       currentRowAspectRatioSum += imgData.aspectRatio;
 
-      const estimatedRowHeight = assumedWidth / currentRowAspectRatioSum;
+      const numImages = currentRowImages.length;
+      const imagesWidth = usableWidth - (numImages - 1) * gap;
+      const rowHeight = imagesWidth / currentRowAspectRatioSum;
 
-      // If adding this image makes the row height reasonably small (so it fits width-wise),
-      // we end the row and check page height.
-      // We aim for rows that aren't massively tall.
-      if (estimatedRowHeight <= targetRowHeight || currentRow.length >= 4) {
-        // Calculate the height this row will actually take on the page
-        const rowHeight = maxPageHeight * (estimatedRowHeight / assumedWidth); // normalized
+      // Decide if we should close the current row.
+      // E.g., if row height is reasonable (<= 1/3 of usable height) or we have 4 images.
+    // Ensure rows aren't too massive vertically
+      if (rowHeight <= usableHeight / 2 || numImages >= 4) {
+        // Now check if this row fits on the current page
+        // The total height added by this row includes the row height itself.
+        // If there are already rows on the page, we also need to account for the gap between rows.
+        const heightAdded = currentPageRows.length === 0 ? rowHeight : gap + rowHeight;
 
-        // Sum up the heights of rows currently on the page
-        const currentPageHeight = currentPage.reduce((sum, row) => sum + row.height, 0);
+      // Use an epsilon (0.5mm) for float inaccuracies to ensure it fits safely
+      if (currentPageHeight + heightAdded > usableHeight - 0.5 && currentPageRows.length > 0) {
+          // Doesn't fit. Push current page and start a new one.
+          pages.push(currentPageRows);
 
-        if (currentPageHeight + rowHeight > maxPageHeight * 0.95 && currentPage.length > 0) {
-          // This row pushes us over the page limit, start a new page
-          pages.push(currentPage);
-          currentPage = [{ images: currentRow, height: rowHeight }];
+          // The row that didn't fit becomes the first row of the new page
+          currentPageRows = [{ images: currentRowImages, height: rowHeight }];
+          currentPageHeight = rowHeight;
         } else {
-          currentPage.push({ images: currentRow, height: rowHeight });
+          // Fits on current page
+          currentPageRows.push({ images: currentRowImages, height: rowHeight });
+          currentPageHeight += heightAdded;
         }
 
-        // Reset row
-        currentRow = [];
+        // Reset for next row
+        currentRowImages = [];
         currentRowAspectRatioSum = 0;
       }
     }
 
-    // Handle any leftover images in the last row
-    if (currentRow.length > 0) {
-      const estimatedRowHeight = assumedWidth / currentRowAspectRatioSum;
-      const rowHeight = maxPageHeight * (estimatedRowHeight / assumedWidth);
-      const currentPageHeight = currentPage.reduce((sum, row) => sum + row.height, 0);
+    // Handle any leftover images that didn't form a "closed" row
+    if (currentRowImages.length > 0) {
+      const numImages = currentRowImages.length;
+      const imagesWidth = usableWidth - (numImages - 1) * gap;
+      // If it's a single image, it might be very tall, but we cap its height at max usable height
+      let rowHeight = imagesWidth / currentRowAspectRatioSum;
 
-      if (currentPageHeight + rowHeight > maxPageHeight * 0.95 && currentPage.length > 0) {
-        pages.push(currentPage);
-        currentPage = [{ images: currentRow, height: rowHeight }];
+      // If a row is taller than the page, constrain it
+      if (rowHeight > usableHeight) {
+          rowHeight = usableHeight;
+      }
+
+      const heightAdded = currentPageRows.length === 0 ? rowHeight : gap + rowHeight;
+
+      // Use an epsilon (0.5mm) for float inaccuracies
+      if (currentPageHeight + heightAdded > usableHeight - 0.5 && currentPageRows.length > 0) {
+        pages.push(currentPageRows);
+        currentPageRows = [{ images: currentRowImages, height: rowHeight }];
+        currentPageHeight = rowHeight;
       } else {
-        currentPage.push({ images: currentRow, height: rowHeight });
+        currentPageRows.push({ images: currentRowImages, height: rowHeight });
       }
     }
 
-    if (currentPage.length > 0) {
-      pages.push(currentPage);
+    // Push the last page
+    if (currentPageRows.length > 0) {
+      pages.push(currentPageRows);
     }
 
     // Render pages
@@ -125,12 +150,14 @@ document.addEventListener('DOMContentLoaded', () => {
       page.forEach(row => {
         const rowDiv = document.createElement('div');
         rowDiv.className = 'masonry-row';
+        // Enforce the calculated height strictly
+        rowDiv.style.height = `${row.height}mm`;
+        rowDiv.style.maxHeight = `${row.height}mm`;
 
         row.images.forEach(imgData => {
           const itemDiv = document.createElement('div');
           itemDiv.className = 'grid-item';
 
-          // Flex-grow based on aspect ratio ensures items in a row share width correctly
           itemDiv.style.flex = `${imgData.aspectRatio} 1 0`;
 
           const img = document.createElement('img');

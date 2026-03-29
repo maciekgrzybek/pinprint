@@ -34,31 +34,27 @@ body {
 /* Page styles */
 .page {
   background: white;
-  width: 210mm;
-  height: 297mm;
+  width: 200mm;
+  height: 285mm;
   margin: 0 auto 20px auto;
   padding: 10mm;
   box-sizing: border-box;
   box-shadow: 0 0 10px rgba(0,0,0,0.1);
   position: relative;
-  display: flex;
-  flex-direction: column;
+  display: block;
 }
 
 .grid {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
+  display: block;
   gap: 5mm;
   margin-bottom: 10mm; /* space for footer */
-  min-height: 0;
-  min-width: 0;
 }
 
 .masonry-row {
   display: flex;
   width: 100%;
   gap: 5mm;
+  margin-bottom: 5mm; /* Replacement for gap since parent is display:block */
   /* Allow row to shrink/grow based on flex children */
 }
 
@@ -108,12 +104,15 @@ body {
   }
 
   .page {
-    margin: 0;
+    margin: 0 auto;
     box-shadow: none;
     page-break-after: always;
     page-break-inside: avoid;
-    width: 100%;
-    height: 100vh;
+    /* Maintain dimensions slightly smaller than full A4 to avoid margin cutoff */
+    width: 200mm;
+    height: 285mm;
     padding: 10mm;
+    position: relative;
+    overflow: hidden;
   }
 }
